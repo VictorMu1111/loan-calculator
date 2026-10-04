@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>房貸試算工具 2.0 (含寬限期與多階段利率)</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; max-width: 450px; margin: auto; background-color: #f0f2f5; }
+        .calculator { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); }
+        h2 { text-align: center; color: #1a365d; margin-top: 0; }
+        label { display: block; margin-top: 15px; font-weight: 600; color: #4a5568; font-size: 14px; }
+        input, select { width: 100%; padding: 10px; margin-top: 6px; box-sizing: border-box; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 15px; }
+        .row { display: flex; gap: 10px; }
+        .col { flex: 1; }
+        button { width: 100%; padding: 12px; margin-top: 25px; background-color: #2b6cb0; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; transition: background 0.3s; }
+        button:hover { background-color: #2c5282; }
+        .result { margin-top: 25px; padding: 20px; background-color: #ebf8ff; border-left: 5px solid #3182ce; border-radius: 8px; display: none; }
+        .result p { margin: 8px 0; font-size: 15px; color: #2d3748; }
+        .highlight { font-size: 18px; font-weight: bold; color: #c53030; }
+        .phase-list { background: white; padding: 15px; border-radius: 6px; margin-top: 15px; border: 1px solid #e2e8f0; }
+        .phase-list ul { margin: 0; padding-left: 20px; color: #4a5568; }
+        .phase-list li { margin-bottom: 8px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="calculator">
+    <h2>🏠 房貸試算工具 2.0</h2>
+    
+    <label for="principal">貸款總額 (萬元)：</label>
+    <input type="number" id="principal" placeholder="例如：1500" value="1500">
+
+    <div class="row">
+        <div class="col">
+            <label for="years">貸款年限 (年)：</label>
+            <input type="number" id="years" placeholder="例如：30" value="30">
+        </div>
+        <div class="col">
+            <label for="graceYears">寬限期 (年)：</label>
+            <input type="number" id="graceYears" placeholder="例如：3" value="3">
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col">
+            <label for="extraRepaymentYear">額外還款年份：</label>
+            <input type="number" id="extraRepaymentYear" placeholder="例如：5" min="1" step="1" value="0">
+        </div>
+        <div class="col">
+            <label for="extraRepaymentAmount">額外還款金額 (萬元)：</label>
+            <input type="number" id="extraRepaymentAmount" placeholder="例如：100" min="0" step="1" value="0">
+        </div>
+    </div>
+
+    <label for="rateType">利率方案：</label>
+    <select id="rateType" onchange="toggleRateInputs()">
+        <option value="single">單一利率 (全程同利率)</option>
+        <option value="two-stage" selected>兩階段浮動利率 (如新青安)</option>
+    </select>
+
+    <!-- 單一利率區塊 -->
+    <div id="singleRateDiv" class="hidden">
+        <label for="singleRate">年利率 (%)：</label>
+        <input type="number" id="singleRate" placeholder="例如：2.2" value="2.2" step="0.01">
+    </div>
+
+    <!-- 兩階段利率區塊 -->
+    <div id="twoStageRateDiv">
+        <div class="row">
+            <div class="col">
+                <label for="rate1">第一階段利率 (%)：</label>
+                <input type="number" id="rate1" placeholder="例如：1.775" value="1.775" step="0.01">
+            </div>
+            <div class="col">
+                <label for="stage1Years">第一階段期間 (年)：</label>
+                <input type="number" id="stage1Years" placeholder="例如：3" value="3">
+            </div>
+        </div>
+        <label for="rate2">第二階段利率 (%) (第4年起)：</label>
+        <input type="number" id="rate2" placeholder="例如：2.275" value="2.275" step="0.01">
+    </div>
+
+    <button onclick="calculateMortgage()">計算還款明細</button>
+
+    <div class="result" id="resultBox">
+        <p>總還款利息：<span class="highlight" id="totalInterest">0</span> 元</p>
+        <p>本息還款總額：<span id="totalPayment">0</span> 元</p>
+        
+        <div class="phase-list">
+            <strong>📅 每月還款變化明細：</strong>
+            <ul id="phaseList">
+                <!-- 動態生成還款階段 -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 切換利率輸入介面
+    function toggleRateInputs() {
+        const type = document.getElementById('rateType').value;
+        if (type === 'single') {
+            document.getElementById('singleRateDiv').style.display = 'block';
+            document.getElementById('twoStageRateDiv').style.display = 'none';
+        } else {
+            document.getElementById('singleRateDiv').style.display = 'none';
+            document.getElementById('twoStageRateDiv').style.display = 'block';
+        }
+    }
+    
+    // 初始化確保顯示正確
+    toggleRateInputs();
+
+    function calculateMortgage() {
+        // 取得基本輸入
+        let principal = parseFloat(document.getElementById('principal').value) * 10000;
+        let years = parseFloat(document.getElementById('years').value);
+        let graceYears = parseFloat(document.getElementById('graceYears').value) || 0;
+        let extraRepaymentYear = parseFloat(document.getElementById('extraRepaymentYear').value) || 0;
+        let extraRepaymentAmount = (parseFloat(document.getElementById('extraRepaymentAmount').value) || 0) * 10000;
+        let rateType = document.getElementById('rateType').value;
+
+        // 參數驗證
+        if (isNaN(principal) || isNaN(years) || principal <= 0 || years <= 0) {
+            alert("請輸入正確的貸款總額與年限！"); return;
+        }
+        if (graceYears >= years) {
+            alert("寬限期不能大於或等於貸款總年限！"); return;
+        }
+        if (extraRepaymentAmount < 0 || extraRepaymentYear < 0 ||
+            (extraRepaymentAmount > 0 &&
+                (!Number.isInteger(extraRepaymentYear) || extraRepaymentYear < 1 || extraRepaymentYear > years))) {
+            alert("請輸入有效的額外還款年份與金額！"); return;
+        }
+
+        let totalMonths = years * 12;
+        let graceMonths = graceYears * 12;
+        
+        let schedule = []; // 紀錄每個月的繳款額
+        let remainingPrincipal = principal;
+        let totalInterestSum = 0;
+
+        // 逐月計算
+        for (let m = 1; m <= totalMonths; m++) {
+            // 額外還款在指定年份的第一個月繳款前一次扣除本金；年份填 0 表示不使用。
+            if (extraRepaymentAmount > 0 && m === (extraRepaymentYear - 1) * 12 + 1) {
+                if (extraRepaymentAmount > remainingPrincipal) {
+                    alert("額外還款金額不能超過該時點的剩餘本金！"); return;
+                }
+                remainingPrincipal -= extraRepaymentAmount;
+            }
+
+            // 決定當月利率
+            let currentAnnualRate = 0;
+            if (rateType === 'single') {
+                currentAnnualRate = parseFloat(document.getElementById('singleRate').value);
+            } else {
+                let stage1Months = parseFloat(document.getElementById('stage1Years').value) * 12;
+                currentAnnualRate = (m <= stage1Months) ? 
+                    parseFloat(document.getElementById('rate1').value) : 
+                    parseFloat(document.getElementById('rate2').value);
+            }
+            
+            let monthlyRate = (currentAnnualRate / 100) / 12;
+            let interestForMonth = remainingPrincipal * monthlyRate;
+            totalInterestSum += interestForMonth;
+            
+            let paymentForMonth = 0;
+            let principalForMonth = 0;
+
+            if (m <= graceMonths) {
+                // 寬限期內：只繳利息
+                paymentForMonth = interestForMonth;
+                principalForMonth = 0;
+            } else {
+                // 寬限期後：本息均攤
+                // 計算剩餘期數
+                let remainingMonths = totalMonths - m + 1;
+                
+                // 本息均攤公式
+                let mathPower = Math.pow(1 + monthlyRate, remainingMonths);
+                paymentForMonth = remainingPrincipal * (monthlyRate * mathPower) / (mathPower - 1);
+                principalForMonth = paymentForMonth - interestForMonth;
+            }
+
+            remainingPrincipal -= principalForMonth;
+            schedule.push(Math.round(paymentForMonth));
+        }
+
+        // 分析階段變化 (將相同繳款額的月份合併顯示)
+        let phases = [];
+        let currentPhase = { start: 1, end: 1, payment: schedule[0] };
+        
+        for (let i = 1; i < schedule.length; i++) {
+            // 容許 10 元以內的進位誤差視為同一階段
+            if (Math.abs(schedule[i] - currentPhase.payment) <= 10) {
+                currentPhase.end = i + 1;
+            } else {
+                phases.push(currentPhase);
+                currentPhase = { start: i + 1, end: i + 1, payment: schedule[i] };
+            }
+        }
+        phases.push(currentPhase);
+
+        // 更新介面
+        let totalPaymentSum = principal + totalInterestSum;
+        document.getElementById('totalInterest').innerText = Math.round(totalInterestSum).toLocaleString();
+        document.getElementById('totalPayment').innerText = Math.round(totalPaymentSum).toLocaleString();
+
+        let phaseHtml = '';
+        phases.forEach(p => {
+            let note = (p.end <= graceMonths) ? ' <span style="color:#d69e2e; font-size:13px;">(寬限期)</span>' : '';
+            
+            let startYear = Math.floor((p.start - 1) / 12);
+            let startMonthStr = (p.start % 12 === 1) ? `第 ${startYear + 1} 年起` : `第 ${p.start} 個月`;
+            if(p.start === 1) startMonthStr = '第 1 個月起';
+
+            phaseHtml += `<li><b>${startMonthStr}</b> (至第${p.end}期)：<br>每月繳 <b>${p.payment.toLocaleString()}</b> 元${note}</li>`;
+        });
+        if (extraRepaymentAmount > 0) {
+            phaseHtml += `<li><b>第 ${extraRepaymentYear} 年第 1 個月前</b>：額外償還本金 <b>${Math.round(extraRepaymentAmount).toLocaleString()}</b> 元</li>`;
+        }
+        document.getElementById('phaseList').innerHTML = phaseHtml;
+        
+        document.getElementById('resultBox').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
