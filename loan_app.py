@@ -1,13 +1,42 @@
 """
 房貸試算工具 - 主程式入口
 """
+import sys
+
 import streamlit as st
 
-from modules.config import PAGES
-from modules.session import init_form_state, K_NAV
-from modules.sections.single_calc import render_single_calc
-from modules.sections.compare import render_compare
-from modules.sections.saved import render_saved_schemes
+
+def _reload_local_modules():
+    """清掉本專案 modules/* 的匯入快取
+
+    Streamlit（含 Community Cloud）重新部署時只會重跑主程式，
+    先前 import 過的 modules/* 還留在 sys.modules，裡面是舊版程式碼，
+    於是新增的常數/函式會找不到，例如：
+        ImportError: cannot import name 'PAGES' from 'modules.config'
+    清掉快取後重新 import，就能拿到最新程式碼（不必手動 Reboot app）。
+    """
+    for name in [m for m in list(sys.modules) if m == "modules" or m.startswith("modules.")]:
+        del sys.modules[name]
+
+
+def _import_app_modules():
+    """匯入頁面需要的模組（集中一處，方便失敗時整批重載）"""
+    from modules.config import PAGES
+    from modules.session import init_form_state, K_NAV
+    from modules.sections.single_calc import render_single_calc
+    from modules.sections.compare import render_compare
+    from modules.sections.saved import render_saved_schemes
+
+    return PAGES, init_form_state, K_NAV, render_single_calc, render_compare, render_saved_schemes
+
+
+try:
+    PAGES, init_form_state, K_NAV, render_single_calc, render_compare, render_saved_schemes = _import_app_modules()
+except ImportError:
+    # 拿到舊的模組快取（部署後常見），清掉後重新載入一次
+    _reload_local_modules()
+    PAGES, init_form_state, K_NAV, render_single_calc, render_compare, render_saved_schemes = _import_app_modules()
+
 
 
 # 頁面設定
