@@ -127,13 +127,56 @@ def calculate_loan(
     total_payment = principal + total_interest
     df = pd.DataFrame(schedule)
 
+    # 每月應繳金額：取「寬限期結束後第一期」的金額
+    if df.empty:
+        monthly_payment = 0.0
+        max_monthly_payment = 0.0
+        grace_monthly_payment = 0.0
+    else:
+        grace_df = df[df["是否寬限期"]]
+        normal_df = df[~df["是否寬限期"]]
+        if normal_df.empty:
+            normal_df = df
+        monthly_payment = float(normal_df.iloc[0]["當期繳款"])
+        max_monthly_payment = float(normal_df["當期繳款"].max())
+        grace_monthly_payment = float(grace_df.iloc[0]["當期繳款"]) if not grace_df.empty else 0.0
+
     return {
         "schedule": df,
         "total_interest": total_interest,
         "total_payment": total_payment,
         "principal": principal,
         "months_taken": len(schedule),
+        "monthly_payment": monthly_payment,
+        "max_monthly_payment": max_monthly_payment,
+        "grace_monthly_payment": grace_monthly_payment,
         "saved_interest": _calc_saved_interest(principal, years, grace_years, rate_type, rate_config, repayment_type, total_interest),
+    }
+
+
+def calculate_from_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """依照存檔的 config（貸款總額單位：萬元）重新計算"""
+    config = config or {}
+    return calculate_loan(
+        principal=float(config.get("principal", 0)) * 10000,
+        years=int(config.get("years", 0)),
+        grace_years=float(config.get("grace_years", 0)),
+        rate_type=config.get("rate_type", "單一利率"),
+        rate_config=config.get("rate_config", {}),
+        repayment_type=config.get("repayment_type", "本息均攤"),
+        extra_repayments=config.get("extra_repayments", []),
+    )
+
+
+def summarize(result: Dict[str, Any]) -> Dict[str, Any]:
+    """把計算結果濃縮成可存進 Google Sheets 的摘要"""
+    return {
+        "total_interest": result.get("total_interest", 0),
+        "total_payment": result.get("total_payment", 0),
+        "months_taken": result.get("months_taken", 0),
+        "saved_interest": result.get("saved_interest", 0),
+        "monthly_payment": result.get("monthly_payment", 0),
+        "grace_monthly_payment": result.get("grace_monthly_payment", 0),
     }
 
 

@@ -4,8 +4,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from modules.calculator import calculate_loan
-from modules.storage import load_schemes, parse_config, parse_summary
+from modules.calculator import calculate_from_config
+from modules.rate_info import describe_rate_plan_text
+from modules.storage import load_schemes, parse_config
 
 
 def render_compare():
@@ -33,15 +34,7 @@ def render_compare():
         row = df[df["id"] == scheme_id].iloc[0]
         config = parse_config(row["config"])
 
-        result = calculate_loan(
-            principal=config["principal"] * 10000,
-            years=config["years"],
-            grace_years=config["grace_years"],
-            rate_type=config["rate_type"],
-            rate_config=config["rate_config"],
-            repayment_type=config.get("repayment_type", "本息均攤"),
-            extra_repayments=config.get("extra_repayments", [])
-        )
+        result = calculate_from_config(config)
         results.append({
             "name": row["name"],
             "config": config,
@@ -58,7 +51,11 @@ def render_compare():
             "年限": f"{r['config']['years']} 年",
             "寬限期": f"{r['config']['grace_years']} 年",
             "利率方案": r["config"]["rate_type"],
+            "利率": describe_rate_plan_text(
+                r["config"].get("rate_type", ""), r["config"].get("rate_config", {})
+            ),
             "還款方式": r["config"].get("repayment_type", "本息均攤"),
+            "每月應繳 (元)": f"{r['result'].get('monthly_payment', 0):,.0f}",
             "總利息 (元)": f"{r['result']['total_interest']:,.0f}",
             "總還款 (元)": f"{r['result']['total_payment']:,.0f}",
             "省下利息 (元)": f"{r['result'].get('saved_interest', 0):,.0f}",

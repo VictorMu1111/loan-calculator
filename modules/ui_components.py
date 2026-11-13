@@ -8,17 +8,27 @@ import pandas as pd
 
 
 def render_summary_metrics(result: dict):
-    """顯示總覽指標"""
-    c1, c2, c3, c4 = st.columns(4)
+    """顯示總覽指標（第一排就是每月應繳金額）"""
+    row1 = st.columns(3)
+    row1[0].metric("💳 每月應繳（寬限期後）", f"{result.get('monthly_payment', 0):,.0f} 元")
+    row1[1].metric(
+        "🕊️ 寬限期月付",
+        f"{result.get('grace_monthly_payment', 0):,.0f} 元" if result.get("grace_monthly_payment", 0) else "—",
+    )
+    row1[2].metric("💰 總還款利息", f"{result.get('total_interest', 0):,.0f} 元")
 
-    c1.metric("💰 總還款利息", f"{result['total_interest']:,.0f} 元")
-    c2.metric("📊 本息還款總額", f"{result['total_payment']:,.0f} 元")
-    c3.metric("⏱️ 實際還款月數", f"{result['months_taken']} 期")
-
+    row2 = st.columns(3)
+    row2[0].metric("📊 本息還款總額", f"{result.get('total_payment', 0):,.0f} 元")
+    row2[1].metric("⏱️ 實際還款月數", f"{result.get('months_taken', 0)} 期")
     if result.get("saved_interest", 0) > 0:
-        c4.metric("🎉 省下利息", f"{result['saved_interest']:,.0f} 元")
+        row2[2].metric("🎉 省下利息", f"{result.get('saved_interest', 0):,.0f} 元")
     else:
-        c4.metric("🎉 省下利息", "—")
+        row2[2].metric("🎉 省下利息", "—")
+
+    st.caption(
+        "每月應繳 = 寬限期結束後第一期的金額；若利率階段調整、提前還款，"
+        "或選擇本金均攤，後續每月金額會再變動（可看「攤還明細」）。"
+    )
 
 
 def render_payment_chart(result: dict):
